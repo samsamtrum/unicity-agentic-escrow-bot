@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { Bot, ShieldCheck, Wallet, Repeat2, Terminal, Network, PlayCircle, CheckCircle2, Send } from 'lucide-react';
 import { createRoot } from 'react-dom/client';
 import { createInitialState, fulfillJob, markPaid, quoteJob } from './agentCore';
 import './style.css';
@@ -15,86 +14,98 @@ function App() {
 
   return (
     <main>
-      <section className="hero">
-        <div className="badge"><Bot size={16}/> Unicity Sphere service</div>
-        <h1>Agentic Escrow Helper</h1>
-        <p className="tagline">Payment and escrow service agent for Unicity Sphere.</p>
-        <p className="intro">
-          A service agent that keeps a Sphere identity online, maintains a bounded testnet UCT budget, receives transfers,
-          tracks payment responses, and stays ready for machine native settlement flows.
-        </p>
-        <div className="actions">
-          <a href="#demo">Try the flow</a>
-          <a href="https://github.com/unicity-sphere/sphere-sdk" target="_blank" className="secondary">Sphere SDK</a>
-        </div>
-      </section>
-
-      <section className="grid">
-        <Card icon={<Wallet/>} title="Wallet identity" text="Creates or restores a Sphere wallet identity and registers a nametag for discovery." />
-        <Card icon={<ShieldCheck/>} title="Budget controls" text="Keeps the agent inside a configured UCT testnet budget before it performs economic actions." />
-        <Card icon={<Repeat2/>} title="Settlement loop" text="Receives transfers and payment request responses while running continuously as a service." />
-        <Card icon={<Network/>} title="Network primitives" text="Uses testnet2 wallet API rails, payments, receiving flow, nametags, and payment response events." />
-      </section>
-
-      <section className="demo" id="demo">
-        <div className="demo-copy">
-          <div className="badge small"><PlayCircle size={15}/> Interactive service flow</div>
-          <h2>Quote, receive, fulfill</h2>
-          <p>
-            This browser demo mirrors the service state machine. The CLI agent uses the Sphere SDK for identity,
-            testnet budget, receive flow, and payment response events.
-          </p>
-          <textarea value={request} onChange={(event) => setRequest(event.target.value)} />
-          <div className="demo-actions">
-            <button onClick={createQuote}><Send size={16}/> Quote job</button>
-            <button onClick={pay} disabled={!activeJob || activeJob.status !== 'awaiting_payment'}>Mark paid</button>
-            <button onClick={fulfill} disabled={!activeJob || activeJob.status !== 'paid'}>Fulfill</button>
-          </div>
-        </div>
-        <div className="state-card">
-          <div className="state-row"><span>Agent</span><strong>{state.nametag}</strong></div>
-          <div className="state-row"><span>Budget</span><strong>{state.budgetUct} UCT</strong></div>
-          <div className="state-row"><span>Price</span><strong>{state.servicePriceUct} UCT</strong></div>
-          <h3>Jobs</h3>
-          {state.jobs.length === 0 ? <p className="muted">No jobs yet.</p> : state.jobs.map((job) => (
-            <div className="job" key={job.id}>
-              <strong>{job.id}</strong>
-              <span>{job.status}</span>
-              <small>{job.request}</small>
-            </div>
-          ))}
-          <h3>Events</h3>
-          <ul className="event-list">{state.events.slice(0, 6).map((event, index) => <li key={`${event}-${index}`}>{event}</li>)}</ul>
-        </div>
-      </section>
-
-      <section className="panel">
+      <header className="topbar">
         <div>
-          <h2>How it works</h2>
-          <p>
-            Set a price and budget once. The service keeps listening for network events, receives payments, and can continue
-            settlement flow programmatically within those limits.
-          </p>
-          <ul className="steps">
-            <li><CheckCircle2 size={18}/> Create or restore a Sphere identity</li>
-            <li><CheckCircle2 size={18}/> Register a nametag for discovery</li>
-            <li><CheckCircle2 size={18}/> Keep a bounded UCT testnet budget</li>
-            <li><CheckCircle2 size={18}/> Receive transfers and payment responses</li>
+          <p className="eyebrow">Unicity Sphere service</p>
+          <h1>Agentic Escrow Helper</h1>
+        </div>
+        <a href="https://github.com/samsamtrum/unicity-agentic-escrow-bot" target="_blank">Source</a>
+      </header>
+
+      <section className="intro">
+        <p>
+          A small service agent that keeps a Sphere identity online, holds a bounded testnet UCT budget, receives payment events,
+          and advances a quote-to-fulfillment flow for machine operated services.
+        </p>
+      </section>
+
+      <section className="layout">
+        <section className="workspace" id="demo">
+          <div className="section-head">
+            <div>
+              <p className="label">Demo flow</p>
+              <h2>Quote a service request</h2>
+            </div>
+            <span className="network">testnet2 pattern</span>
+          </div>
+
+          <label className="field">
+            <span>Customer request</span>
+            <textarea value={request} onChange={(event) => setRequest(event.target.value)} />
+          </label>
+
+          <div className="button-row">
+            <button onClick={createQuote}>Quote job</button>
+            <button onClick={pay} disabled={!activeJob || activeJob.status !== 'awaiting_payment'}>Mark payment received</button>
+            <button onClick={fulfill} disabled={!activeJob || activeJob.status !== 'paid'}>Fulfill job</button>
+          </div>
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Job</th><th>Customer</th><th>Price</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                {state.jobs.length === 0 ? (
+                  <tr><td colSpan={4} className="empty">No jobs quoted yet.</td></tr>
+                ) : state.jobs.map((job) => (
+                  <tr key={job.id}>
+                    <td>{job.id}</td>
+                    <td>{job.customer}</td>
+                    <td>{job.quotedUct} UCT</td>
+                    <td><span className="status">{job.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside className="side">
+          <div className="panel">
+            <p className="label">Agent</p>
+            <dl>
+              <div><dt>Nametag</dt><dd>{state.nametag}</dd></div>
+              <div><dt>Budget</dt><dd>{state.budgetUct} UCT</dd></div>
+              <div><dt>Service price</dt><dd>{state.servicePriceUct} UCT</dd></div>
+            </dl>
+          </div>
+
+          <div className="panel">
+            <p className="label">Run locally</p>
+            <pre>{`npm install\ncp .env.example .env\nnpm run agent`}</pre>
+            <p className="note">Use <code>npm run agent:demo</code> for a deterministic local flow without network calls.</p>
+          </div>
+        </aside>
+      </section>
+
+      <section className="details">
+        <article>
+          <h3>What the service uses</h3>
+          <ul>
+            <li>Sphere wallet identity and nametag registration</li>
+            <li>Testnet2 wallet API rails</li>
+            <li>UCT operating budget for testnet actions</li>
+            <li>Incoming transfer handling and payment response events</li>
           </ul>
-        </div>
-        <div className="terminal">
-          <div><Terminal size={15}/> Run the agent</div>
-          <code>npm install</code>
-          <code>cp .env.example .env</code>
-          <code>npm run agent</code>
-        </div>
+        </article>
+        <article>
+          <h3>Event log</h3>
+          <ol className="events">{state.events.slice(0, 8).map((event, index) => <li key={`${event}-${index}`}>{event}</li>)}</ol>
+        </article>
       </section>
     </main>
   );
-}
-
-function Card({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
-  return <article className="card"><div className="icon">{icon}</div><h3>{title}</h3><p>{text}</p></article>;
 }
 
 createRoot(document.getElementById('root')!).render(<App />);
