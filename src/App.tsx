@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createInitialState, fulfillJob, markPaid, quoteJob, type AgentState } from './agentCore';
 import { clearState, loadState, saveState } from './storage';
+import { connectWallet, disconnectWallet, initialWalletState, requestWalletPayment, type WalletState } from './walletConnect';
 import './style.css';
 
 function makeReceipt(state: AgentState) {
@@ -21,6 +22,7 @@ function App() {
   const [state, setState] = useState(loadState);
   const [request, setRequest] = useState('summarize a market signal and return a signed receipt');
   const [copied, setCopied] = useState(false);
+  const [wallet, setWallet] = useState<WalletState>(initialWalletState);
   const activeJob = useMemo(() => state.jobs[0], [state.jobs]);
 
   useEffect(() => saveState(state), [state]);
@@ -29,6 +31,27 @@ function App() {
   const pay = () => activeJob && setState((current) => markPaid(current, activeJob.id));
   const fulfill = () => activeJob && setState((current) => fulfillJob(current, activeJob.id));
   const reset = () => setState(clearState());
+  const connect = async () => {
+    setWallet({ ...initialWalletState, status: 'connecting' });
+    try {
+      setWallet(await connectWallet());
+    } catch (error) {
+      setWallet({ ...initialWalletState, status: 'error', error: error instanceof Error ? error.message : String(error) });
+    }
+  };
+  const disconnect = async () => {
+    await disconnectWallet();
+    setWallet(initialWalletState);
+  };
+  const requestPayment = async () => {
+    if (!activeJob) return;
+    try {
+      await requestWalletPayment({ amount: activeJob.quotedUct, memo: activeJob.id });
+      setState((current) => ({ ...current, events: [`wallet payment request opened for ${activeJob.id}`, ...current.events] }));
+    } catch (error) {
+      setWallet((current) => ({ ...current, error: error instanceof Error ? error.message : String(error) }));
+    }
+  };
   const copyReceipt = async () => {
     await navigator.clipboard.writeText(JSON.stringify(makeReceipt(state), null, 2));
     setCopied(true);
@@ -59,7 +82,7 @@ function App() {
               <p className="label">Service workbench</p>
               <h2>Quote, settle, and export a receipt</h2>
             </div>
-            <span className="network">state saved locally</span>
+            <span className="network">wallet optional · testnet2</span>
           </div>
 
           <label className="field">
@@ -70,6 +93,7 @@ function App() {
           <div className="button-row">
             <button onClick={createQuote}>Quote job</button>
             <button onClick={pay} disabled={!activeJob || activeJob.status !== 'awaiting_payment'}>Mark payment received</button>
+            <button className="plain" onClick={requestPayment} disabled={!activeJob || wallet.status !== 'connected'}>Open wallet payment request</button>
             <button onClick={fulfill} disabled={!activeJob || activeJob.status !== 'paid'}>Fulfill job</button>
             <button className="plain" onClick={copyReceipt} disabled={state.jobs.length === 0}>{copied ? 'Receipt copied' : 'Copy receipt JSON'}</button>
             <button className="plain" onClick={reset}>Reset</button>
@@ -98,11 +122,30 @@ function App() {
 
         <aside className="side">
           <div className="panel">
-            <p className="label">Agent</p>
+            <p className="label">Sphere wallet</p>
+            {wallet.status !== 'connected' ? (
+              <>
+                <button className="connect" onClick={connect} disabled={wallet.status === 'connecting'}>{wallet.status === 'connecting' ? 'Connecting…' : 'Connect wallet'}</button>
+                {wallet.error && <p className="error">{wallet.error}</p>}
+              </>
+            ) : (
+              <>
+                <dl>
+                  <div><dt>Nametag</dt><dd>{wallet.identity?.nametag ? `@${wallet.identity.nametag}` : 'not set'}</dd></div>
+                  <div><dt>Transport</dt><dd>{wallet.transport}</dd></div>
+                  <div><dt>Address</dt><dd className="mono">{wallet.identity?.directAddress ?? wallet.identity?.chainPubkey.slice(0, 18)}</dd></div>
+                </dl>
+                <button className="connect secondary" onClick={disconnect}>Disconnect</button>
+              </>
+            )}
+          </div>
+
+          <div className="panel">
+            <p className="label">Service policy</p>
             <dl>
-              <div><dt>Nametag</dt><dd>{state.nametag}</dd></div>
+              <div><dt>Agent</dt><dd>{state.nametag}</dd></div>
               <div><dt>Budget</dt><dd>{state.budgetUct} UCT</dd></div>
-              <div><dt>Service price</dt><dd>{state.servicePriceUct} UCT</dd></div>
+              <div><dt>Price</dt><dd>{state.servicePriceUct} UCT</dd></div>
             </dl>
           </div>
 
@@ -118,7 +161,8 @@ function App() {
         <article>
           <h3>What runs live</h3>
           <ul>
-            <li>The workbench stores service state locally in the browser.</li>
+            <li>The workbench connects to Sphere wallet through Sphere Connect when available.</li>
+            <li>Service state is saved locally in the browser.</li>
             <li>Jobs move through quote, payment received, and fulfilled states.</li>
             <li>Receipts can be copied as JSON for review or integration.</li>
             <li>The CLI service uses Sphere SDK rails for testnet2 operation.</li>
