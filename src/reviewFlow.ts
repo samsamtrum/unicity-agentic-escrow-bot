@@ -1,10 +1,10 @@
-import { createInitialState, createJob, fulfillJob, markPaid, requestPayment, runAutopilot } from './agentCore';
+import { createInitialState, createInvoice, createJob, fulfillJob, markPaid, runAutopilot } from './agentCore';
 
 let state = createInitialState();
 state = createJob(state, '@service-customer', 'prepare a settlement receipt for a completed service request');
 state = runAutopilot(state);
 const job = state.jobs[0];
-state = requestPayment(state, job.id);
+state = createInvoice(state, job.id);
 state = markPaid(state, job.id);
 state = fulfillJob(state, job.id);
 

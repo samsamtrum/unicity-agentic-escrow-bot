@@ -1,4 +1,4 @@
-export type JobStatus = 'open' | 'quoted' | 'payment_requested' | 'paid' | 'fulfilled' | 'rejected';
+export type JobStatus = 'open' | 'quoted' | 'invoice_created' | 'paid' | 'fulfilled' | 'rejected';
 
 export type ServiceJob = {
   id: string;
@@ -109,19 +109,19 @@ export function runAutopilot(state: AgentState): AgentState {
   return next;
 }
 
-export function requestPayment(state: AgentState, jobId: string): AgentState {
+export function createInvoice(state: AgentState, jobId: string): AgentState {
   return {
     ...state,
-    jobs: state.jobs.map((job) => job.id === jobId && job.status === 'quoted' ? { ...job, status: 'payment_requested' } : job),
-    events: [`payment request prepared for ${jobId}`, ...state.events],
+    jobs: state.jobs.map((job) => job.id === jobId && job.status === 'quoted' ? { ...job, status: 'invoice_created' } : job),
+    events: [`invoice created for ${jobId}`, ...state.events],
   };
 }
 
 export function markPaid(state: AgentState, jobId: string): AgentState {
   return {
     ...state,
-    jobs: state.jobs.map((job) => job.id === jobId && ['quoted', 'payment_requested'].includes(job.status) ? { ...job, status: 'paid' } : job),
-    events: [`payment received for ${jobId}`, ...state.events],
+    jobs: state.jobs.map((job) => job.id === jobId && ['quoted', 'invoice_created'].includes(job.status) ? { ...job, status: 'paid' } : job),
+    events: [`payment confirmed for ${jobId}`, ...state.events],
   };
 }
 

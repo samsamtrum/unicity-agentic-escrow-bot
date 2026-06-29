@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { clearState, loadState, saveState } from './storage';
 import { connectWallet, disconnectWallet, initialWalletState, settleOnchain, type WalletState } from './walletConnect';
-import { createJob, fulfillJob, markPaid, requestPayment, runAutopilot, type AgentState } from './agentCore';
+import { createInvoice, createJob, fulfillJob, markPaid, runAutopilot, type AgentState } from './agentCore';
 import './style.css';
 
 function makeReceipt(state: AgentState) {
@@ -34,7 +34,7 @@ function App() {
   const rewardRemaining = state.rewardBudgetXp - state.distributedXp;
   const activeAgent = activeJob?.agent ? state.agents.find((agent) => agent.nametag === activeJob.agent) : null;
   const settlementTarget = payoutOverride.trim() || activeJob?.agent || '';
-  const canConfirmPaid = Boolean(activeJob && ['quoted', 'payment_requested'].includes(activeJob.status) && settlementResult);
+  const canConfirmPaid = Boolean(activeJob && ['quoted', 'invoice_created'].includes(activeJob.status) && settlementResult);
   const activeReceipt = activeJob?.receiptId ? makeReceipt(state) : null;
 
   useEffect(() => saveState(state), [state]);
@@ -80,7 +80,7 @@ function App() {
     setPaymentResult(invoice);
     setActionStatus(`Invoice created for ${activeJob.id}. ${activeJob.customer} pays ${activeJob.agent} ${amount} UCT.`);
     setState((current) => ({
-      ...requestPayment(current, activeJob.id),
+      ...createInvoice(current, activeJob.id),
       events: [`invoice created for ${activeJob.id}: ${activeJob.customer} pays ${activeJob.agent} ${amount} UCT`, ...current.events],
     }));
   };
@@ -172,7 +172,7 @@ function App() {
           <div className="button-row">
             <button onClick={openJob}>Open job</button>
             <button onClick={autopilot}>Run autopilot quote</button>
-            <button onClick={preparePayment} disabled={!activeJob || !['quoted', 'payment_requested'].includes(activeJob.status)}>Create invoice</button>
+            <button onClick={preparePayment} disabled={!activeJob || !['quoted', 'invoice_created'].includes(activeJob.status)}>Create invoice</button>
             <button onClick={onchainSettle} disabled={!activeJob || !activeJob.agent || wallet.status !== 'connected'}>Settle onchain</button>
             <button onClick={pay} disabled={!canConfirmPaid}>Confirm paid</button>
             <button onClick={fulfill} disabled={!activeJob || activeJob.status !== 'paid'}>Fulfill + reward</button>
