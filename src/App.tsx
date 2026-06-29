@@ -54,7 +54,7 @@ function App() {
   const activeAgent = activeJob?.agent ? state.agents.find((agent) => agent.nametag === activeJob.agent) : null;
   const settlementTarget = payoutOverride.trim() || activeJob?.agent || '';
   const canCreateInvoice = Boolean(activeJob && activeJob.status === 'quoted');
-  const canSettle = Boolean(activeJob && activeJob.status === 'invoice_created' && activeJob.agent && wallet.status === 'connected' && paymentResult?.jobId === activeJob.id);
+  const canSettle = Boolean(activeJob && activeJob.status === 'invoice_created' && activeJob.agent && wallet.status === 'connected');
   const canConfirmPaid = Boolean(activeJob && activeJob.status === 'invoice_created' && settlementResult?.jobId === activeJob.id);
   const activeReceipt = activeJob?.receiptId ? makeReceipt(state) : null;
 

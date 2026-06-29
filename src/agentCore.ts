@@ -120,7 +120,7 @@ export function createInvoice(state: AgentState, jobId: string): AgentState {
 export function markPaid(state: AgentState, jobId: string): AgentState {
   return {
     ...state,
-    jobs: state.jobs.map((job) => job.id === jobId && ['quoted', 'invoice_created'].includes(job.status) ? { ...job, status: 'paid' } : job),
+    jobs: state.jobs.map((job) => job.id === jobId && job.status === 'invoice_created' ? { ...job, status: 'paid' } : job),
     events: [`payment confirmed for ${jobId}`, ...state.events],
   };
 }
