@@ -16,7 +16,7 @@ export type AgentState = {
 
 export function createInitialState(): AgentState {
   return {
-    nametag: '@escrow-helper-demo',
+    nametag: '@escrow-helper-service',
     budgetUct: 1000,
     servicePriceUct: 25,
     jobs: [],

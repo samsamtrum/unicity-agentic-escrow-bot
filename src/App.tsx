@@ -20,14 +20,14 @@ function makeReceipt(state: AgentState) {
 
 function App() {
   const [state, setState] = useState(loadState);
-  const [request, setRequest] = useState('summarize a market signal and return a signed receipt');
+  const [request, setRequest] = useState('prepare a settlement receipt for a completed service request');
   const [copied, setCopied] = useState(false);
   const [wallet, setWallet] = useState<WalletState>(initialWalletState);
   const activeJob = useMemo(() => state.jobs[0], [state.jobs]);
 
   useEffect(() => saveState(state), [state]);
 
-  const createQuote = () => setState((current) => quoteJob(current, '@demo-customer', request));
+  const createQuote = () => setState((current) => quoteJob(current, '@service-customer', request));
   const pay = () => activeJob && setState((current) => markPaid(current, activeJob.id));
   const fulfill = () => activeJob && setState((current) => fulfillJob(current, activeJob.id));
   const reset = () => setState(clearState());

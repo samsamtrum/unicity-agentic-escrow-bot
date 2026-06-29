@@ -18,9 +18,9 @@ function readConfig(): Config {
   return {
     network: (process.env.UNICITY_NETWORK ?? 'testnet') as Config['network'],
     walletApi: process.env.UNICITY_WALLET_API ?? 'https://wallet-api.unicity.network',
-    deviceId: process.env.UNICITY_DEVICE_ID ?? 'agentic-escrow-demo-device',
+    deviceId: process.env.UNICITY_DEVICE_ID ?? 'agentic-escrow-service-device',
     oracleApiKey: process.env.UNICITY_ORACLE_API_KEY ?? 'sk_ddc3cfcc001e4a28ac3fad7407f99590',
-    agentNametag: process.env.AGENT_NAMETAG ?? 'escrow-helper-demo',
+    agentNametag: process.env.AGENT_NAMETAG ?? 'escrow-helper-service',
     agentBudgetUct: BigInt(process.env.AGENT_BUDGET_UCT ?? '1000'),
     servicePriceUct: BigInt(process.env.SERVICE_PRICE_UCT ?? '25'),
     dryRun: (process.env.DRY_RUN ?? 'true').toLowerCase() !== 'false',
@@ -79,7 +79,7 @@ async function main(): Promise<void> {
   console.log('Autonomous escrow helper loop started.');
   console.log('Policy: quote small service requests, request payment, and settle only inside budget.');
   console.log('Price per service:', config.servicePriceUct.toString(), 'UCT');
-  console.log('Mode:', config.dryRun ? 'dry-run demo' : 'live testnet2');
+  console.log('Mode:', config.dryRun ? 'dry-run' : 'live testnet2');
 
   sphere.payments.onPaymentRequestResponse((response) => {
     console.log('Payment request response:', response.responseType, response.transferId ?? 'no-transfer');
