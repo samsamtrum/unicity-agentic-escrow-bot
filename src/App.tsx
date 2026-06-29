@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { clearState, loadState, saveState } from './storage';
-import { connectWallet, disconnectWallet, initialWalletState, requestWalletPayment, type WalletState } from './walletConnect';
+import { connectWallet, disconnectWallet, initialWalletState, requestWalletPayment, settleOnchain, type WalletState } from './walletConnect';
 import { createJob, fulfillJob, markPaid, requestPayment, runAutopilot, type AgentState } from './agentCore';
 import './style.css';
 
@@ -43,10 +43,24 @@ function App() {
     if (!activeJob) return;
     setState((current) => requestPayment(current, activeJob.id));
     if (wallet.status === 'connected') {
-      try { await requestWalletPayment({ amount: activeJob.quotedUct || 25, memo: activeJob.id }); }
+      try { await requestWalletPayment({ amount: activeJob.quotedUct || 25, memo: activeJob.id, recipient: activeJob.agent ?? undefined }); }
       catch (error) { setWallet((current) => ({ ...current, error: error instanceof Error ? error.message : String(error) })); }
     }
   };
+
+  const onchainSettle = async () => {
+    if (!activeJob || !activeJob.agent) return;
+    try {
+      const result = await settleOnchain({ recipient: activeJob.agent, amount: activeJob.quotedUct || 25, memo: activeJob.id });
+      setState((current) => ({
+        ...current,
+        events: [`onchain settlement intent completed for ${activeJob.id}: ${JSON.stringify(result).slice(0, 140)}`, ...current.events],
+      }));
+    } catch (error) {
+      setWallet((current) => ({ ...current, error: error instanceof Error ? error.message : String(error) }));
+    }
+  };
+
   const pay = () => activeJob && setState((current) => markPaid(current, activeJob.id));
   const fulfill = () => activeJob && setState((current) => fulfillJob(current, activeJob.id));
   const reset = () => setState(clearState());
@@ -99,6 +113,7 @@ function App() {
             <button onClick={autopilot}>Run autopilot quote</button>
             <button onClick={preparePayment} disabled={!activeJob || !['quoted', 'payment_requested'].includes(activeJob.status)}>Request payment</button>
             <button onClick={pay} disabled={!activeJob || !['quoted', 'payment_requested'].includes(activeJob.status)}>Mark paid</button>
+            <button onClick={onchainSettle} disabled={!activeJob || !activeJob.agent || wallet.status !== 'connected'}>Settle onchain</button>
             <button onClick={fulfill} disabled={!activeJob || activeJob.status !== 'paid'}>Fulfill + reward</button>
             <button className="plain" onClick={copyReceipt} disabled={state.jobs.length === 0}>{copied ? 'Copied' : 'Copy receipt'}</button>
             <button className="plain" onClick={reset}>Reset</button>

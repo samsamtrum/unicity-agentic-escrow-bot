@@ -12,7 +12,8 @@ The web app supports the full service flow in the browser:
 2. Open a customer job.
 3. Run autopilot so an online agent quotes the job under policy.
 4. Request payment through Sphere Connect when a wallet is connected.
-5. Mark the payment received and fulfill the job.
+5. Settle onchain with a Sphere send intent or mark the payment received after wallet approval.
+6. Fulfill the job and allocate rewards.
 6. Allocate reward XP from the operator budget and export a receipt.
 
 ```bash
@@ -52,6 +53,7 @@ npm run agent:review
 - Nametag registration
 - Testnet2 wallet API rails
 - Payment request intent
+- Send intent for onchain settlement
 - UCT testnet operating budget
 - Incoming transfer receive flow
 - Payment request response events
