@@ -1,16 +1,39 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createInitialState, fulfillJob, markPaid, quoteJob } from './agentCore';
+import { createInitialState, fulfillJob, markPaid, quoteJob, type AgentState } from './agentCore';
+import { clearState, loadState, saveState } from './storage';
 import './style.css';
 
+function makeReceipt(state: AgentState) {
+  return {
+    app: 'Agentic Escrow Helper',
+    network: 'Unicity testnet2',
+    agent: state.nametag,
+    budgetUct: state.budgetUct,
+    servicePriceUct: state.servicePriceUct,
+    jobs: state.jobs,
+    events: state.events,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
 function App() {
-  const [state, setState] = useState(createInitialState());
+  const [state, setState] = useState(loadState);
   const [request, setRequest] = useState('summarize a market signal and return a signed receipt');
+  const [copied, setCopied] = useState(false);
   const activeJob = useMemo(() => state.jobs[0], [state.jobs]);
+
+  useEffect(() => saveState(state), [state]);
 
   const createQuote = () => setState((current) => quoteJob(current, '@demo-customer', request));
   const pay = () => activeJob && setState((current) => markPaid(current, activeJob.id));
   const fulfill = () => activeJob && setState((current) => fulfillJob(current, activeJob.id));
+  const reset = () => setState(clearState());
+  const copyReceipt = async () => {
+    await navigator.clipboard.writeText(JSON.stringify(makeReceipt(state), null, 2));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  };
 
   return (
     <main>
@@ -24,19 +47,19 @@ function App() {
 
       <section className="intro">
         <p>
-          A small service agent that keeps a Sphere identity online, holds a bounded testnet UCT budget, receives payment events,
-          and advances a quote-to-fulfillment flow for machine operated services.
+          A browser workbench and CLI service for machine operated payments. The workbench handles job quotes,
+          payment state, fulfillment state, and receipt export. The CLI service keeps the Sphere SDK payment loop available for testnet2.
         </p>
       </section>
 
       <section className="layout">
-        <section className="workspace" id="demo">
+        <section className="workspace" id="workbench">
           <div className="section-head">
             <div>
-              <p className="label">Service flow</p>
-              <h2>Quote a service request</h2>
+              <p className="label">Service workbench</p>
+              <h2>Quote, settle, and export a receipt</h2>
             </div>
-            <span className="network">testnet2 service</span>
+            <span className="network">state saved locally</span>
           </div>
 
           <label className="field">
@@ -48,6 +71,8 @@ function App() {
             <button onClick={createQuote}>Quote job</button>
             <button onClick={pay} disabled={!activeJob || activeJob.status !== 'awaiting_payment'}>Mark payment received</button>
             <button onClick={fulfill} disabled={!activeJob || activeJob.status !== 'paid'}>Fulfill job</button>
+            <button className="plain" onClick={copyReceipt} disabled={state.jobs.length === 0}>{copied ? 'Receipt copied' : 'Copy receipt JSON'}</button>
+            <button className="plain" onClick={reset}>Reset</button>
           </div>
 
           <div className="table-wrap">
@@ -82,21 +107,21 @@ function App() {
           </div>
 
           <div className="panel">
-            <p className="label">Run locally</p>
+            <p className="label">Run the testnet service</p>
             <pre>{`npm install\ncp .env.example .env\nnpm run agent`}</pre>
-            <p className="note">Use <code>npm run agent:review</code> to inspect the service flow without network calls before starting the testnet agent.</p>
+            <p className="note">Use <code>npm run agent:review</code> to inspect the service flow before starting the testnet agent.</p>
           </div>
         </aside>
       </section>
 
       <section className="details">
         <article>
-          <h3>What the service uses</h3>
+          <h3>What runs live</h3>
           <ul>
-            <li>Sphere wallet identity and nametag registration</li>
-            <li>Testnet2 wallet API rails</li>
-            <li>UCT operating budget for testnet actions</li>
-            <li>Incoming transfer handling and payment response events</li>
+            <li>The workbench stores service state locally in the browser.</li>
+            <li>Jobs move through quote, payment received, and fulfilled states.</li>
+            <li>Receipts can be copied as JSON for review or integration.</li>
+            <li>The CLI service uses Sphere SDK rails for testnet2 operation.</li>
           </ul>
         </article>
         <article>

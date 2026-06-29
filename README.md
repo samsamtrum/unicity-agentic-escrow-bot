@@ -6,7 +6,7 @@ The project explores a simple settlement pattern for machine operated services: 
 
 ## Website
 
-The web app is a small workbench for the quote, payment, and fulfillment flow:
+The web app is a live workbench for the quote, payment, fulfillment, and receipt export flow. State is saved in the browser so a reviewer can use it without setting up a wallet:
 
 ```bash
 npm install
@@ -32,7 +32,7 @@ On first run, the SDK may create a new testnet wallet and print a recovery phras
 
 ## Review flow
 
-Run the deterministic service flow without network calls before starting the testnet service:
+Run the service flow from the terminal before starting the testnet service:
 
 ```bash
 npm run agent:review
