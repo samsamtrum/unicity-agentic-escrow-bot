@@ -25,6 +25,7 @@ function App() {
   const [wallet, setWallet] = useState<WalletState>(initialWalletState);
   const [customer, setCustomer] = useState('@service-customer');
   const [request, setRequest] = useState('prepare a settlement receipt for a completed service request');
+  const [settlementTo, setSettlementTo] = useState('');
   const [copied, setCopied] = useState(false);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const activeJob = useMemo(() => state.jobs.find((job) => job.status !== 'fulfilled' && job.status !== 'rejected') ?? state.jobs[0], [state.jobs]);
@@ -73,7 +74,9 @@ function App() {
     setActionStatus(`Opening Sphere send intent for ${activeJob.id}…`);
     setState((current) => ({ ...current, events: [`opening onchain settlement intent for ${activeJob.id}`, ...current.events] }));
     try {
-      const result = await settleOnchain({ recipient: activeJob.agent, amount: activeJob.quotedUct || 25, memo: activeJob.id });
+      const to = settlementTo.trim() || wallet.identity?.directAddress || wallet.identity?.chainPubkey || '';
+      if (!to) throw new Error('Enter a settlement recipient address first');
+      const result = await settleOnchain({ to, amount: activeJob.quotedUct || 25, memo: activeJob.id });
       const summary = JSON.stringify(result ?? { status: 'approved' }).slice(0, 160);
       setActionStatus(`Onchain settlement completed for ${activeJob.id}`);
       setState((current) => ({
@@ -133,6 +136,7 @@ function App() {
           <div className="form-grid">
             <label className="field"><span>Customer</span><input value={customer} onChange={(event) => setCustomer(event.target.value)} /></label>
             <label className="field wide"><span>Service request</span><textarea value={request} onChange={(event) => setRequest(event.target.value)} /></label>
+            <label className="field wide"><span>Settlement recipient address</span><input placeholder="Paste a Sphere testnet recipient address, or leave empty to use connected wallet" value={settlementTo} onChange={(event) => setSettlementTo(event.target.value)} /></label>
           </div>
 
           <div className="button-row">
