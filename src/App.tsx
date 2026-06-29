@@ -189,9 +189,9 @@ function App() {
           </div>
 
           <div className="form-grid">
-            <label className="field"><span>Client / payer nametag</span><input placeholder="@customer" value={customer} onChange={(event) => setCustomer(event.target.value)} /></label>
-            <label className="field"><span>Payout override</span><input placeholder="Optional: agent nametag or address" value={payoutOverride} onChange={(event) => setPayoutOverride(event.target.value)} /></label>
-            <label className="field wide"><span>Service request</span><textarea value={request} onChange={(event) => setRequest(event.target.value)} /></label>
+            <label className="field"><span>Client / payer nametag</span><input placeholder="@customer" value={customer} onChange={(event) => setCustomer(event.target.value)} /><small>The client creates the job and pays the quoted agent.</small></label>
+            <label className="field"><span>Payout override</span><input placeholder="Optional: agent nametag or address" value={payoutOverride} onChange={(event) => setPayoutOverride(event.target.value)} /><small>Leave empty to pay the agent selected by autopilot. Use this only to test payout to another nametag or address.</small></label>
+            <label className="field wide"><span>Service request</span><textarea value={request} onChange={(event) => setRequest(event.target.value)} /><small>Autopilot matches this request with an online service agent from the directory.</small></label>
           </div>
 
           <div className="button-row">
@@ -218,6 +218,7 @@ function App() {
               <span>2</span>
               <h3>Agent quote</h3>
               <p>{activeAgent ? `${activeAgent.nametag} accepted this job at ${activeAgent.priceUct} UCT.` : 'Run autopilot to match an online agent.'}</p>
+              <p className="hint">The default payee is the matched agent. In the seeded directory, @escrow-helper-service is the first online agent whose price fits the policy, so autopilot selects it unless its policy changes.</p>
               {activeAgent && <dl className="compact"><div><dt>Service</dt><dd>{activeAgent.service}</dd></div><div><dt>Policy</dt><dd>{activeAgent.priceUct <= activeAgent.maxBudgetUct ? 'within budget' : 'over budget'}</dd></div><div><dt>Payout to</dt><dd>{settlementTarget}</dd></div></dl>}
             </article>
             <article className="step-card">
@@ -268,7 +269,8 @@ function App() {
 
           <div className="panel">
             <p className="label">Agent directory</p>
-            <div className="agent-list">{state.agents.map((agent) => <div key={agent.nametag} className="agent-row"><strong>{agent.nametag}</strong><span>{agent.service}</span><em>{agent.priceUct} UCT · {agent.jobsCompleted} done</em></div>)}</div>
+            <p className="hint">Autopilot scans this directory and assigns the first online agent whose quote is inside its budget policy.</p>
+            <div className="agent-list">{state.agents.map((agent) => <div key={agent.nametag} className="agent-row"><strong>{agent.nametag}</strong><span>{agent.service}</span><em>{agent.priceUct} UCT · budget {agent.maxBudgetUct} · {agent.jobsCompleted} done</em></div>)}</div>
           </div>
         </aside>
       </section>
