@@ -82,7 +82,11 @@ export async function settleOnchain(params: { recipient: string; amount: number;
 }
 
 export async function disconnectWallet(): Promise<void> {
-  if (!connection) return;
-  await connection.disconnect();
+  const current = connection;
   connection = null;
+  if (!current) return;
+  await Promise.race([
+    current.disconnect(),
+    new Promise<void>((resolve) => window.setTimeout(resolve, 1500)),
+  ]);
 }

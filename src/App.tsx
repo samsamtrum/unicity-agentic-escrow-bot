@@ -26,6 +26,7 @@ function App() {
   const [customer, setCustomer] = useState('@service-customer');
   const [request, setRequest] = useState('prepare a settlement receipt for a completed service request');
   const [copied, setCopied] = useState(false);
+  const [actionStatus, setActionStatus] = useState<string | null>(null);
   const activeJob = useMemo(() => state.jobs.find((job) => job.status !== 'fulfilled' && job.status !== 'rejected') ?? state.jobs[0], [state.jobs]);
   const rewardRemaining = state.rewardBudgetXp - state.distributedXp;
 
@@ -36,28 +37,54 @@ function App() {
     try { setWallet(await connectWallet()); }
     catch (error) { setWallet({ ...initialWalletState, status: 'error', error: error instanceof Error ? error.message : String(error) }); }
   };
-  const disconnect = async () => { await disconnectWallet(); setWallet(initialWalletState); };
+  const disconnect = async () => {
+    setActionStatus('Disconnecting wallet…');
+    try { await disconnectWallet(); }
+    finally {
+      setWallet(initialWalletState);
+      setActionStatus('Wallet disconnected');
+    }
+  };
   const openJob = () => setState((current) => createJob(current, customer, request));
   const autopilot = () => setState(runAutopilot);
   const preparePayment = async () => {
     if (!activeJob) return;
+    setActionStatus(`Preparing payment request for ${activeJob.id}…`);
     setState((current) => requestPayment(current, activeJob.id));
     if (wallet.status === 'connected') {
-      try { await requestWalletPayment({ amount: activeJob.quotedUct || 25, memo: activeJob.id, recipient: activeJob.agent ?? undefined }); }
-      catch (error) { setWallet((current) => ({ ...current, error: error instanceof Error ? error.message : String(error) })); }
+      try {
+        const result = await requestWalletPayment({ amount: activeJob.quotedUct || 25, memo: activeJob.id, recipient: activeJob.agent ?? undefined });
+        setActionStatus(`Payment request completed for ${activeJob.id}`);
+        setState((current) => ({ ...current, events: [`payment request wallet result for ${activeJob.id}: ${JSON.stringify(result).slice(0, 120)}`, ...current.events] }));
+      }
+      catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setActionStatus(`Payment request failed: ${message}`);
+        setWallet((current) => ({ ...current, error: message }));
+        setState((current) => ({ ...current, events: [`payment request failed for ${activeJob.id}: ${message}`, ...current.events] }));
+      }
+    } else {
+      setActionStatus('Payment request prepared locally. Connect wallet to open it in Sphere.');
     }
   };
 
   const onchainSettle = async () => {
     if (!activeJob || !activeJob.agent) return;
+    setActionStatus(`Opening Sphere send intent for ${activeJob.id}…`);
+    setState((current) => ({ ...current, events: [`opening onchain settlement intent for ${activeJob.id}`, ...current.events] }));
     try {
       const result = await settleOnchain({ recipient: activeJob.agent, amount: activeJob.quotedUct || 25, memo: activeJob.id });
+      const summary = JSON.stringify(result ?? { status: 'approved' }).slice(0, 160);
+      setActionStatus(`Onchain settlement completed for ${activeJob.id}`);
       setState((current) => ({
         ...current,
-        events: [`onchain settlement intent completed for ${activeJob.id}: ${JSON.stringify(result).slice(0, 140)}`, ...current.events],
+        events: [`onchain settlement result for ${activeJob.id}: ${summary}`, ...current.events],
       }));
     } catch (error) {
-      setWallet((current) => ({ ...current, error: error instanceof Error ? error.message : String(error) }));
+      const message = error instanceof Error ? error.message : String(error);
+      setActionStatus(`Onchain settlement failed: ${message}`);
+      setWallet((current) => ({ ...current, error: message }));
+      setState((current) => ({ ...current, events: [`onchain settlement failed for ${activeJob.id}: ${message}`, ...current.events] }));
     }
   };
 
@@ -118,6 +145,8 @@ function App() {
             <button className="plain" onClick={copyReceipt} disabled={state.jobs.length === 0}>{copied ? 'Copied' : 'Copy receipt'}</button>
             <button className="plain" onClick={reset}>Reset</button>
           </div>
+
+          {actionStatus && <div className="action-status">{actionStatus}</div>}
 
           <div className="table-wrap">
             <table>
