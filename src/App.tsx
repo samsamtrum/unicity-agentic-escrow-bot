@@ -5,6 +5,25 @@ import { connectWallet, disconnectWallet, initialWalletState, settleOnchain, typ
 import { createInvoice, createJob, fulfillJob, markPaid, runAutopilot, type AgentState } from './agentCore';
 import './style.css';
 
+type InvoiceRecord = {
+  invoiceId: string;
+  jobId: string;
+  payer: string;
+  payee: string;
+  settlementTo: string;
+  amount: string;
+  rawAmount: string;
+  terms: string;
+  status: 'invoice_created';
+  createdAt: string;
+};
+
+type SettlementRecord = {
+  jobId: string;
+  sentTo: string;
+  walletResult: unknown;
+};
+
 function makeReceipt(state: AgentState) {
   return {
     app: 'Agent Market Desk',
@@ -28,13 +47,15 @@ function App() {
   const [payoutOverride, setPayoutOverride] = useState('');
   const [copied, setCopied] = useState(false);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
-  const [paymentResult, setPaymentResult] = useState<unknown>(null);
-  const [settlementResult, setSettlementResult] = useState<unknown>(null);
+  const [paymentResult, setPaymentResult] = useState<InvoiceRecord | null>(null);
+  const [settlementResult, setSettlementResult] = useState<SettlementRecord | null>(null);
   const activeJob = useMemo(() => state.jobs.find((job) => job.status !== 'fulfilled' && job.status !== 'rejected') ?? state.jobs[0], [state.jobs]);
   const rewardRemaining = state.rewardBudgetXp - state.distributedXp;
   const activeAgent = activeJob?.agent ? state.agents.find((agent) => agent.nametag === activeJob.agent) : null;
   const settlementTarget = payoutOverride.trim() || activeJob?.agent || '';
-  const canConfirmPaid = Boolean(activeJob && ['quoted', 'invoice_created'].includes(activeJob.status) && settlementResult);
+  const canCreateInvoice = Boolean(activeJob && activeJob.status === 'quoted');
+  const canSettle = Boolean(activeJob && activeJob.status === 'invoice_created' && activeJob.agent && wallet.status === 'connected' && paymentResult?.jobId === activeJob.id);
+  const canConfirmPaid = Boolean(activeJob && activeJob.status === 'invoice_created' && settlementResult?.jobId === activeJob.id);
   const activeReceipt = activeJob?.receiptId ? makeReceipt(state) : null;
 
   useEffect(() => saveState(state), [state]);
@@ -55,8 +76,14 @@ function App() {
   const openJob = () => {
     setPaymentResult(null);
     setSettlementResult(null);
-    setState((current) => createJob(current, customer, request));
-    setActionStatus(`Opened a service job for ${customer}`);
+    const payer = customer.trim();
+    const serviceRequest = request.trim();
+    if (!payer || !serviceRequest) {
+      setActionStatus('Enter a client nametag and service request first');
+      return;
+    }
+    setState((current) => createJob(current, payer, serviceRequest));
+    setActionStatus(`Opened a service job for ${payer}`);
   };
   const autopilot = () => {
     setState(runAutopilot);
@@ -65,7 +92,7 @@ function App() {
   const preparePayment = () => {
     if (!activeJob || !activeJob.agent) return;
     const amount = activeJob.quotedUct || 25;
-    const invoice = {
+    const invoice: InvoiceRecord = {
       invoiceId: `invoice-${activeJob.id}`,
       jobId: activeJob.id,
       payer: activeJob.customer,
@@ -79,10 +106,7 @@ function App() {
     };
     setPaymentResult(invoice);
     setActionStatus(`Invoice created for ${activeJob.id}. ${activeJob.customer} pays ${activeJob.agent} ${amount} UCT.`);
-    setState((current) => ({
-      ...createInvoice(current, activeJob.id),
-      events: [`invoice created for ${activeJob.id}: ${activeJob.customer} pays ${activeJob.agent} ${amount} UCT`, ...current.events],
-    }));
+    setState((current) => createInvoice(current, activeJob.id));
   };
 
   const onchainSettle = async () => {
@@ -93,8 +117,9 @@ function App() {
       const to = settlementTarget;
       if (!to) throw new Error('Run autopilot first so the job has an agent payout target');
       const result = await settleOnchain({ to, amount: activeJob.quotedUct || 25, memo: activeJob.id });
-      setSettlementResult(result);
-      const summary = JSON.stringify(result ?? { status: 'approved' });
+      const settlement = { jobId: activeJob.id, sentTo: to, walletResult: result };
+      setSettlementResult(settlement);
+      const summary = JSON.stringify(settlement);
       setActionStatus(`Onchain settlement sent to ${to} for ${activeJob.id}. Confirm paid when the wallet transfer is visible.`);
       setState((current) => ({
         ...current,
@@ -172,8 +197,8 @@ function App() {
           <div className="button-row">
             <button onClick={openJob}>Open job</button>
             <button onClick={autopilot}>Run autopilot quote</button>
-            <button onClick={preparePayment} disabled={!activeJob || !['quoted', 'invoice_created'].includes(activeJob.status)}>Create invoice</button>
-            <button onClick={onchainSettle} disabled={!activeJob || !activeJob.agent || wallet.status !== 'connected'}>Settle onchain</button>
+            <button onClick={preparePayment} disabled={!canCreateInvoice}>Create invoice</button>
+            <button onClick={onchainSettle} disabled={!canSettle}>Settle onchain</button>
             <button onClick={pay} disabled={!canConfirmPaid}>Confirm paid</button>
             <button onClick={fulfill} disabled={!activeJob || activeJob.status !== 'paid'}>Fulfill + reward</button>
             <button className="plain" onClick={copyReceipt} disabled={state.jobs.length === 0}>{copied ? 'Copied' : 'Copy receipt'}</button>
