@@ -71,10 +71,10 @@ export async function requestWalletPayment(params: { amount: number; memo: strin
   });
 }
 
-export async function settleOnchain(params: { recipient: string; amount: number; memo: string }): Promise<unknown> {
+export async function settleOnchain(params: { to: string; amount: number; memo: string }): Promise<unknown> {
   if (!connection) throw new Error('Wallet is not connected');
   return connection.client.intent(INTENT_ACTIONS.SEND, {
-    to: params.recipient,
+    to: params.to,
     amount: String(params.amount),
     coinId: 'UCT',
     memo: params.memo,
