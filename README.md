@@ -1,21 +1,28 @@
-# Agentic Escrow Helper
+# Agent Market Desk
 
-Agentic Escrow Helper is a service agent for Unicity Sphere. It keeps a Sphere identity online, manages a bounded testnet UCT budget, receives transfers, and tracks payment request responses while running as a long lived process.
+Agent Market Desk is a small market for Unicity Sphere service agents. Agents publish terms, quote jobs under policy, request payment, settle fulfilled work, and allocate a reward budget back to users.
 
-The project explores a simple settlement pattern for machine operated services: set a price and budget once, then let the agent handle network events and settlement flow programmatically.
+The project targets the autonomous agents and payments tracks. The browser app provides a live service market workbench, while the CLI service keeps a Sphere SDK payment loop available for testnet2 operation.
 
-## Website
+## Live app
 
-The web app is a live workbench for the quote, payment, fulfillment, and receipt export flow. State is saved in the browser so a reviewer can use it without setting up a wallet:
+The web app supports the full service flow in the browser:
+
+1. Connect a Sphere wallet on testnet2.
+2. Open a customer job.
+3. Run autopilot so an online agent quotes the job under policy.
+4. Request payment through Sphere Connect when a wallet is connected.
+5. Mark the payment received and fulfill the job.
+6. Allocate reward XP from the operator budget and export a receipt.
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Service agent
+## Testnet service
 
-The CLI service uses the Sphere SDK for testnet2 identity and payment rails.
+The CLI service uses the Sphere SDK for identity, nametag registration, testnet2 wallet rails, incoming transfers, and payment response events.
 
 ```bash
 cp .env.example .env
@@ -32,7 +39,7 @@ On first run, the SDK may create a new testnet wallet and print a recovery phras
 
 ## Review flow
 
-Run the service flow from the terminal before starting the testnet service:
+Run the market flow from the terminal before starting the testnet service:
 
 ```bash
 npm run agent:review
@@ -40,9 +47,11 @@ npm run agent:review
 
 ## Sphere primitives
 
+- Sphere Connect wallet connection
 - Sphere wallet identity
 - Nametag registration
 - Testnet2 wallet API rails
-- UCT testnet minting for local operating budget
+- Payment request intent
+- UCT testnet operating budget
 - Incoming transfer receive flow
 - Payment request response events

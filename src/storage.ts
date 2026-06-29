@@ -1,6 +1,6 @@
 import { createInitialState, type AgentState } from './agentCore';
 
-const STORAGE_KEY = 'agentic-escrow-helper-state-v1';
+const STORAGE_KEY = 'agent-market-desk-v1';
 
 export function loadState(): AgentState {
   if (typeof localStorage === 'undefined') return createInitialState();

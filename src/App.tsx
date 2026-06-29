@@ -1,18 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createInitialState, fulfillJob, markPaid, quoteJob, type AgentState } from './agentCore';
 import { clearState, loadState, saveState } from './storage';
 import { connectWallet, disconnectWallet, initialWalletState, requestWalletPayment, type WalletState } from './walletConnect';
+import { createJob, fulfillJob, markPaid, requestPayment, runAutopilot, type AgentState } from './agentCore';
 import './style.css';
 
 function makeReceipt(state: AgentState) {
   return {
-    app: 'Agentic Escrow Helper',
+    app: 'Agent Market Desk',
     network: 'Unicity testnet2',
-    agent: state.nametag,
-    budgetUct: state.budgetUct,
-    servicePriceUct: state.servicePriceUct,
+    operator: state.operator,
+    rewardBudgetXp: state.rewardBudgetXp,
+    distributedXp: state.distributedXp,
+    agents: state.agents,
     jobs: state.jobs,
+    rewards: state.rewards,
     events: state.events,
     generatedAt: new Date().toISOString(),
   };
@@ -20,38 +22,34 @@ function makeReceipt(state: AgentState) {
 
 function App() {
   const [state, setState] = useState(loadState);
+  const [wallet, setWallet] = useState<WalletState>(initialWalletState);
+  const [customer, setCustomer] = useState('@service-customer');
   const [request, setRequest] = useState('prepare a settlement receipt for a completed service request');
   const [copied, setCopied] = useState(false);
-  const [wallet, setWallet] = useState<WalletState>(initialWalletState);
-  const activeJob = useMemo(() => state.jobs[0], [state.jobs]);
+  const activeJob = useMemo(() => state.jobs.find((job) => job.status !== 'fulfilled' && job.status !== 'rejected') ?? state.jobs[0], [state.jobs]);
+  const rewardRemaining = state.rewardBudgetXp - state.distributedXp;
 
   useEffect(() => saveState(state), [state]);
 
-  const createQuote = () => setState((current) => quoteJob(current, '@service-customer', request));
+  const connect = async () => {
+    setWallet({ ...initialWalletState, status: 'connecting' });
+    try { setWallet(await connectWallet()); }
+    catch (error) { setWallet({ ...initialWalletState, status: 'error', error: error instanceof Error ? error.message : String(error) }); }
+  };
+  const disconnect = async () => { await disconnectWallet(); setWallet(initialWalletState); };
+  const openJob = () => setState((current) => createJob(current, customer, request));
+  const autopilot = () => setState(runAutopilot);
+  const preparePayment = async () => {
+    if (!activeJob) return;
+    setState((current) => requestPayment(current, activeJob.id));
+    if (wallet.status === 'connected') {
+      try { await requestWalletPayment({ amount: activeJob.quotedUct || 25, memo: activeJob.id }); }
+      catch (error) { setWallet((current) => ({ ...current, error: error instanceof Error ? error.message : String(error) })); }
+    }
+  };
   const pay = () => activeJob && setState((current) => markPaid(current, activeJob.id));
   const fulfill = () => activeJob && setState((current) => fulfillJob(current, activeJob.id));
   const reset = () => setState(clearState());
-  const connect = async () => {
-    setWallet({ ...initialWalletState, status: 'connecting' });
-    try {
-      setWallet(await connectWallet());
-    } catch (error) {
-      setWallet({ ...initialWalletState, status: 'error', error: error instanceof Error ? error.message : String(error) });
-    }
-  };
-  const disconnect = async () => {
-    await disconnectWallet();
-    setWallet(initialWalletState);
-  };
-  const requestPayment = async () => {
-    if (!activeJob) return;
-    try {
-      await requestWalletPayment({ amount: activeJob.quotedUct, memo: activeJob.id });
-      setState((current) => ({ ...current, events: [`wallet payment request opened for ${activeJob.id}`, ...current.events] }));
-    } catch (error) {
-      setWallet((current) => ({ ...current, error: error instanceof Error ? error.message : String(error) }));
-    }
-  };
   const copyReceipt = async () => {
     await navigator.clipboard.writeText(JSON.stringify(makeReceipt(state), null, 2));
     setCopied(true);
@@ -62,57 +60,57 @@ function App() {
     <main>
       <header className="topbar">
         <div>
-          <p className="eyebrow">Unicity Sphere service</p>
-          <h1>Agentic Escrow Helper</h1>
+          <p className="eyebrow">Unicity Sphere · autonomous agents</p>
+          <h1>Agent Market Desk</h1>
         </div>
         <a href="https://github.com/samsamtrum/unicity-agentic-escrow-bot" target="_blank">Source</a>
       </header>
 
       <section className="intro">
         <p>
-          A browser workbench and CLI service for machine operated payments. The workbench handles job quotes,
-          payment state, fulfillment state, and receipt export. The CLI service keeps the Sphere SDK payment loop available for testnet2.
+          A small market where service agents publish terms, accept jobs under policy, request payment, settle work,
+          and allocate a reward budget back to users after fulfillment.
         </p>
       </section>
 
+      <section className="metrics">
+        <div><span>Online agents</span><strong>{state.agents.filter((agent) => agent.online).length}</strong></div>
+        <div><span>Open jobs</span><strong>{state.jobs.filter((job) => job.status !== 'fulfilled' && job.status !== 'rejected').length}</strong></div>
+        <div><span>Rewards left</span><strong>{rewardRemaining} XP</strong></div>
+      </section>
+
       <section className="layout">
-        <section className="workspace" id="workbench">
+        <section className="workspace">
           <div className="section-head">
             <div>
-              <p className="label">Service workbench</p>
-              <h2>Quote, settle, and export a receipt</h2>
+              <p className="label">Job market</p>
+              <h2>Create a request and let an agent quote it</h2>
             </div>
-            <span className="network">wallet optional · testnet2</span>
+            <span className="network">testnet2 wallet support</span>
           </div>
 
-          <label className="field">
-            <span>Customer request</span>
-            <textarea value={request} onChange={(event) => setRequest(event.target.value)} />
-          </label>
+          <div className="form-grid">
+            <label className="field"><span>Customer</span><input value={customer} onChange={(event) => setCustomer(event.target.value)} /></label>
+            <label className="field wide"><span>Service request</span><textarea value={request} onChange={(event) => setRequest(event.target.value)} /></label>
+          </div>
 
           <div className="button-row">
-            <button onClick={createQuote}>Quote job</button>
-            <button onClick={pay} disabled={!activeJob || activeJob.status !== 'awaiting_payment'}>Mark payment received</button>
-            <button className="plain" onClick={requestPayment} disabled={!activeJob || wallet.status !== 'connected'}>Open wallet payment request</button>
-            <button onClick={fulfill} disabled={!activeJob || activeJob.status !== 'paid'}>Fulfill job</button>
-            <button className="plain" onClick={copyReceipt} disabled={state.jobs.length === 0}>{copied ? 'Receipt copied' : 'Copy receipt JSON'}</button>
+            <button onClick={openJob}>Open job</button>
+            <button onClick={autopilot}>Run autopilot quote</button>
+            <button onClick={preparePayment} disabled={!activeJob || !['quoted', 'payment_requested'].includes(activeJob.status)}>Request payment</button>
+            <button onClick={pay} disabled={!activeJob || !['quoted', 'payment_requested'].includes(activeJob.status)}>Mark paid</button>
+            <button onClick={fulfill} disabled={!activeJob || activeJob.status !== 'paid'}>Fulfill + reward</button>
+            <button className="plain" onClick={copyReceipt} disabled={state.jobs.length === 0}>{copied ? 'Copied' : 'Copy receipt'}</button>
             <button className="plain" onClick={reset}>Reset</button>
           </div>
 
           <div className="table-wrap">
             <table>
-              <thead>
-                <tr><th>Job</th><th>Customer</th><th>Price</th><th>Status</th></tr>
-              </thead>
+              <thead><tr><th>Job</th><th>Agent</th><th>Customer</th><th>Price</th><th>Status</th><th>Reward</th></tr></thead>
               <tbody>
-                {state.jobs.length === 0 ? (
-                  <tr><td colSpan={4} className="empty">No jobs quoted yet.</td></tr>
-                ) : state.jobs.map((job) => (
+                {state.jobs.length === 0 ? <tr><td colSpan={6} className="empty">No jobs yet.</td></tr> : state.jobs.map((job) => (
                   <tr key={job.id}>
-                    <td>{job.id}</td>
-                    <td>{job.customer}</td>
-                    <td>{job.quotedUct} UCT</td>
-                    <td><span className="status">{job.status}</span></td>
+                    <td>{job.id}</td><td>{job.agent ?? 'unassigned'}</td><td>{job.customer}</td><td>{job.quotedUct || '-'} UCT</td><td><span className="status">{job.status}</span></td><td>{job.rewardXp || '-'} XP</td>
                   </tr>
                 ))}
               </tbody>
@@ -123,54 +121,30 @@ function App() {
         <aside className="side">
           <div className="panel">
             <p className="label">Sphere wallet</p>
-            {wallet.status !== 'connected' ? (
-              <>
-                <button className="connect" onClick={connect} disabled={wallet.status === 'connecting'}>{wallet.status === 'connecting' ? 'Connecting…' : 'Connect wallet'}</button>
-                {wallet.error && <p className="error">{wallet.error}</p>}
-              </>
-            ) : (
-              <>
-                <dl>
-                  <div><dt>Nametag</dt><dd>{wallet.identity?.nametag ? `@${wallet.identity.nametag}` : 'not set'}</dd></div>
-                  <div><dt>Transport</dt><dd>{wallet.transport}</dd></div>
-                  <div><dt>Address</dt><dd className="mono">{wallet.identity?.directAddress ?? wallet.identity?.chainPubkey.slice(0, 18)}</dd></div>
-                </dl>
-                <button className="connect secondary" onClick={disconnect}>Disconnect</button>
-              </>
-            )}
+            {wallet.status !== 'connected' ? <>
+              <button className="connect" onClick={connect} disabled={wallet.status === 'connecting'}>{wallet.status === 'connecting' ? 'Connecting…' : 'Connect wallet'}</button>
+              {wallet.error && <p className="error">{wallet.error}</p>}
+            </> : <>
+              <dl><div><dt>Nametag</dt><dd>{wallet.identity?.nametag ? `@${wallet.identity.nametag}` : 'not set'}</dd></div><div><dt>Transport</dt><dd>{wallet.transport}</dd></div><div><dt>Address</dt><dd className="mono">{wallet.identity?.directAddress ?? wallet.identity?.chainPubkey.slice(0, 18)}</dd></div></dl>
+              <button className="connect secondary" onClick={disconnect}>Disconnect</button>
+            </>}
           </div>
 
           <div className="panel">
-            <p className="label">Service policy</p>
-            <dl>
-              <div><dt>Agent</dt><dd>{state.nametag}</dd></div>
-              <div><dt>Budget</dt><dd>{state.budgetUct} UCT</dd></div>
-              <div><dt>Price</dt><dd>{state.servicePriceUct} UCT</dd></div>
-            </dl>
-          </div>
-
-          <div className="panel">
-            <p className="label">Run the testnet service</p>
-            <pre>{`npm install\ncp .env.example .env\nnpm run agent`}</pre>
-            <p className="note">Use <code>npm run agent:review</code> to inspect the service flow before starting the testnet agent.</p>
+            <p className="label">Agent directory</p>
+            <div className="agent-list">{state.agents.map((agent) => <div key={agent.nametag} className="agent-row"><strong>{agent.nametag}</strong><span>{agent.service}</span><em>{agent.priceUct} UCT · {agent.jobsCompleted} done</em></div>)}</div>
           </div>
         </aside>
       </section>
 
       <section className="details">
         <article>
-          <h3>What runs live</h3>
-          <ul>
-            <li>The workbench connects to Sphere wallet through Sphere Connect when available.</li>
-            <li>Service state is saved locally in the browser.</li>
-            <li>Jobs move through quote, payment received, and fulfilled states.</li>
-            <li>Receipts can be copied as JSON for review or integration.</li>
-            <li>The CLI service uses Sphere SDK rails for testnet2 operation.</li>
-          </ul>
+          <h3>User reward ledger</h3>
+          {state.rewards.length === 0 ? <p className="muted">No rewards allocated yet.</p> : <ul>{state.rewards.map((reward) => <li key={reward.id}>{reward.customer} earned {reward.xp} XP for {reward.jobId}</li>)}</ul>}
         </article>
         <article>
           <h3>Event log</h3>
-          <ol className="events">{state.events.slice(0, 8).map((event, index) => <li key={`${event}-${index}`}>{event}</li>)}</ol>
+          <ol className="events">{state.events.slice(0, 10).map((event, index) => <li key={`${event}-${index}`}>{event}</li>)}</ol>
         </article>
       </section>
     </main>
