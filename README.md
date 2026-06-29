@@ -6,7 +6,7 @@ The project explores a simple settlement pattern for machine operated services: 
 
 ## Website
 
-The web app shows the service flow and a small interactive state machine:
+The web app is a small workbench for the quote, payment, and fulfillment flow:
 
 ```bash
 npm install
@@ -30,12 +30,12 @@ DRY_RUN=false npm run agent
 
 On first run, the SDK may create a new testnet wallet and print a recovery phrase. Save it securely and never commit it.
 
-## Local demo
+## Review flow
 
-Run the deterministic service flow without network calls:
+Run the deterministic service flow without network calls before starting the testnet service:
 
 ```bash
-npm run agent:demo
+npm run agent:review
 ```
 
 ## Sphere primitives

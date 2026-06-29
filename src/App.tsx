@@ -33,10 +33,10 @@ function App() {
         <section className="workspace" id="demo">
           <div className="section-head">
             <div>
-              <p className="label">Demo flow</p>
+              <p className="label">Service flow</p>
               <h2>Quote a service request</h2>
             </div>
-            <span className="network">testnet2 pattern</span>
+            <span className="network">testnet2 service</span>
           </div>
 
           <label className="field">
@@ -84,7 +84,7 @@ function App() {
           <div className="panel">
             <p className="label">Run locally</p>
             <pre>{`npm install\ncp .env.example .env\nnpm run agent`}</pre>
-            <p className="note">Use <code>npm run agent:demo</code> for a deterministic local flow without network calls.</p>
+            <p className="note">Use <code>npm run agent:review</code> to inspect the service flow without network calls before starting the testnet agent.</p>
           </div>
         </aside>
       </section>
