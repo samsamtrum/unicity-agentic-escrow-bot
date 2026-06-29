@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { clearState, loadState, saveState } from './storage';
-import { connectWallet, disconnectWallet, initialWalletState, requestWalletPayment, settleOnchain, type WalletState } from './walletConnect';
+import { connectWallet, disconnectWallet, initialWalletState, settleOnchain, type WalletState } from './walletConnect';
 import { createJob, fulfillJob, markPaid, requestPayment, runAutopilot, type AgentState } from './agentCore';
 import './style.css';
 
@@ -25,11 +25,17 @@ function App() {
   const [wallet, setWallet] = useState<WalletState>(initialWalletState);
   const [customer, setCustomer] = useState('@service-customer');
   const [request, setRequest] = useState('prepare a settlement receipt for a completed service request');
-  const [settlementTo, setSettlementTo] = useState('');
+  const [payoutOverride, setPayoutOverride] = useState('');
   const [copied, setCopied] = useState(false);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
+  const [paymentResult, setPaymentResult] = useState<unknown>(null);
+  const [settlementResult, setSettlementResult] = useState<unknown>(null);
   const activeJob = useMemo(() => state.jobs.find((job) => job.status !== 'fulfilled' && job.status !== 'rejected') ?? state.jobs[0], [state.jobs]);
   const rewardRemaining = state.rewardBudgetXp - state.distributedXp;
+  const activeAgent = activeJob?.agent ? state.agents.find((agent) => agent.nametag === activeJob.agent) : null;
+  const settlementTarget = payoutOverride.trim() || activeJob?.agent || '';
+  const canConfirmPaid = Boolean(activeJob && ['quoted', 'payment_requested'].includes(activeJob.status) && settlementResult);
+  const activeReceipt = activeJob?.receiptId ? makeReceipt(state) : null;
 
   useEffect(() => saveState(state), [state]);
 
@@ -46,27 +52,37 @@ function App() {
       setActionStatus('Wallet disconnected');
     }
   };
-  const openJob = () => setState((current) => createJob(current, customer, request));
-  const autopilot = () => setState(runAutopilot);
-  const preparePayment = async () => {
-    if (!activeJob) return;
-    setActionStatus(`Preparing payment request for ${activeJob.id}…`);
-    setState((current) => requestPayment(current, activeJob.id));
-    if (wallet.status === 'connected') {
-      try {
-        const result = await requestWalletPayment({ amount: activeJob.quotedUct || 25, memo: activeJob.id, recipient: activeJob.agent ?? undefined });
-        setActionStatus(`Payment request completed for ${activeJob.id}`);
-        setState((current) => ({ ...current, events: [`payment request wallet result for ${activeJob.id}: ${JSON.stringify(result).slice(0, 120)}`, ...current.events] }));
-      }
-      catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setActionStatus(`Payment request failed: ${message}`);
-        setWallet((current) => ({ ...current, error: message }));
-        setState((current) => ({ ...current, events: [`payment request failed for ${activeJob.id}: ${message}`, ...current.events] }));
-      }
-    } else {
-      setActionStatus('Payment request prepared locally. Connect wallet to open it in Sphere.');
-    }
+  const openJob = () => {
+    setPaymentResult(null);
+    setSettlementResult(null);
+    setState((current) => createJob(current, customer, request));
+    setActionStatus(`Opened a service job for ${customer}`);
+  };
+  const autopilot = () => {
+    setState(runAutopilot);
+    setActionStatus('Autopilot matched the job against online agents and policy limits');
+  };
+  const preparePayment = () => {
+    if (!activeJob || !activeJob.agent) return;
+    const amount = activeJob.quotedUct || 25;
+    const invoice = {
+      invoiceId: `invoice-${activeJob.id}`,
+      jobId: activeJob.id,
+      payer: activeJob.customer,
+      payee: activeJob.agent,
+      settlementTo: settlementTarget,
+      amount: `${amount} UCT`,
+      rawAmount: `${BigInt(amount) * 10n ** 18n}`,
+      terms: 'Pay the quoted service amount on Unicity testnet2 before fulfillment.',
+      status: 'invoice_created',
+      createdAt: new Date().toISOString(),
+    };
+    setPaymentResult(invoice);
+    setActionStatus(`Invoice created for ${activeJob.id}. ${activeJob.customer} pays ${activeJob.agent} ${amount} UCT.`);
+    setState((current) => ({
+      ...requestPayment(current, activeJob.id),
+      events: [`invoice created for ${activeJob.id}: ${activeJob.customer} pays ${activeJob.agent} ${amount} UCT`, ...current.events],
+    }));
   };
 
   const onchainSettle = async () => {
@@ -74,11 +90,12 @@ function App() {
     setActionStatus(`Opening Sphere send intent for ${activeJob.id}…`);
     setState((current) => ({ ...current, events: [`opening onchain settlement intent for ${activeJob.id}`, ...current.events] }));
     try {
-      const to = settlementTo.trim() || wallet.identity?.directAddress || wallet.identity?.chainPubkey || '';
-      if (!to) throw new Error('Enter a settlement recipient address first');
+      const to = settlementTarget;
+      if (!to) throw new Error('Run autopilot first so the job has an agent payout target');
       const result = await settleOnchain({ to, amount: activeJob.quotedUct || 25, memo: activeJob.id });
-      const summary = JSON.stringify(result ?? { status: 'approved' }).slice(0, 160);
-      setActionStatus(`Onchain settlement completed for ${activeJob.id}`);
+      setSettlementResult(result);
+      const summary = JSON.stringify(result ?? { status: 'approved' });
+      setActionStatus(`Onchain settlement sent to ${to} for ${activeJob.id}. Confirm paid when the wallet transfer is visible.`);
       setState((current) => ({
         ...current,
         events: [`onchain settlement result for ${activeJob.id}: ${summary}`, ...current.events],
@@ -91,9 +108,22 @@ function App() {
     }
   };
 
-  const pay = () => activeJob && setState((current) => markPaid(current, activeJob.id));
-  const fulfill = () => activeJob && setState((current) => fulfillJob(current, activeJob.id));
-  const reset = () => setState(clearState());
+  const pay = () => {
+    if (!activeJob) return;
+    setState((current) => markPaid(current, activeJob.id));
+    setActionStatus(`Payment confirmed for ${activeJob.id}`);
+  };
+  const fulfill = () => {
+    if (!activeJob) return;
+    setState((current) => fulfillJob(current, activeJob.id));
+    setActionStatus(`Fulfilled ${activeJob.id} and allocated user reward`);
+  };
+  const reset = () => {
+    setPaymentResult(null);
+    setSettlementResult(null);
+    setActionStatus(null);
+    setState(clearState());
+  };
   const copyReceipt = async () => {
     await navigator.clipboard.writeText(JSON.stringify(makeReceipt(state), null, 2));
     setCopied(true);
@@ -112,7 +142,7 @@ function App() {
 
       <section className="intro">
         <p>
-          A small market where service agents publish terms, accept jobs under policy, request payment, settle work,
+          A small market where service agents publish terms, accept jobs under policy, create invoices, settle work,
           and allocate a reward budget back to users after fulfillment.
         </p>
       </section>
@@ -134,17 +164,17 @@ function App() {
           </div>
 
           <div className="form-grid">
-            <label className="field"><span>Customer</span><input value={customer} onChange={(event) => setCustomer(event.target.value)} /></label>
+            <label className="field"><span>Client / payer nametag</span><input placeholder="@customer" value={customer} onChange={(event) => setCustomer(event.target.value)} /></label>
+            <label className="field"><span>Payout override</span><input placeholder="Optional: agent nametag or address" value={payoutOverride} onChange={(event) => setPayoutOverride(event.target.value)} /></label>
             <label className="field wide"><span>Service request</span><textarea value={request} onChange={(event) => setRequest(event.target.value)} /></label>
-            <label className="field wide"><span>Settlement recipient address</span><input placeholder="Paste a Sphere testnet recipient address, or leave empty to use connected wallet" value={settlementTo} onChange={(event) => setSettlementTo(event.target.value)} /></label>
           </div>
 
           <div className="button-row">
             <button onClick={openJob}>Open job</button>
             <button onClick={autopilot}>Run autopilot quote</button>
-            <button onClick={preparePayment} disabled={!activeJob || !['quoted', 'payment_requested'].includes(activeJob.status)}>Request payment</button>
-            <button onClick={pay} disabled={!activeJob || !['quoted', 'payment_requested'].includes(activeJob.status)}>Mark paid</button>
+            <button onClick={preparePayment} disabled={!activeJob || !['quoted', 'payment_requested'].includes(activeJob.status)}>Create invoice</button>
             <button onClick={onchainSettle} disabled={!activeJob || !activeJob.agent || wallet.status !== 'connected'}>Settle onchain</button>
+            <button onClick={pay} disabled={!canConfirmPaid}>Confirm paid</button>
             <button onClick={fulfill} disabled={!activeJob || activeJob.status !== 'paid'}>Fulfill + reward</button>
             <button className="plain" onClick={copyReceipt} disabled={state.jobs.length === 0}>{copied ? 'Copied' : 'Copy receipt'}</button>
             <button className="plain" onClick={reset}>Reset</button>
@@ -152,9 +182,42 @@ function App() {
 
           {actionStatus && <div className="action-status">{actionStatus}</div>}
 
+          <div className="workflow-grid">
+            <article className="step-card">
+              <span>1</span>
+              <h3>Job</h3>
+              <p>{activeJob ? `${activeJob.id} for ${activeJob.customer}` : 'Open a job to start.'}</p>
+              {activeJob && <dl className="compact"><div><dt>Status</dt><dd>{activeJob.status}</dd></div><div><dt>Request</dt><dd>{activeJob.request}</dd></div></dl>}
+            </article>
+            <article className="step-card">
+              <span>2</span>
+              <h3>Agent quote</h3>
+              <p>{activeAgent ? `${activeAgent.nametag} accepted this job at ${activeAgent.priceUct} UCT.` : 'Run autopilot to match an online agent.'}</p>
+              {activeAgent && <dl className="compact"><div><dt>Service</dt><dd>{activeAgent.service}</dd></div><div><dt>Policy</dt><dd>{activeAgent.priceUct <= activeAgent.maxBudgetUct ? 'within budget' : 'over budget'}</dd></div><div><dt>Payout to</dt><dd>{settlementTarget}</dd></div></dl>}
+            </article>
+            <article className="step-card">
+              <span>3</span>
+              <h3>Invoice</h3>
+              <p>{paymentResult ? 'Invoice terms are ready for this job.' : 'Create invoice terms after the agent quote.'}</p>
+              {paymentResult ? <pre>{JSON.stringify(paymentResult, null, 2)}</pre> : null}
+            </article>
+            <article className="step-card">
+              <span>4</span>
+              <h3>Settlement</h3>
+              <p>{settlementResult ? `Onchain transfer intent completed for ${settlementTarget}. Confirm after wallet balance updates.` : 'Send UCT to the quoted agent, or use payout override for testing.'}</p>
+              {settlementResult ? <pre>{JSON.stringify(settlementResult, null, 2)}</pre> : null}
+            </article>
+            <article className="step-card wide-step">
+              <span>5</span>
+              <h3>Fulfillment and reward</h3>
+              <p>{activeReceipt ? 'Receipt is ready and reward is recorded.' : 'Confirm payment, fulfill the job, then allocate the user reward.'}</p>
+              {activeJob && <dl className="compact"><div><dt>Receipt</dt><dd>{activeJob.receiptId ?? 'pending'}</dd></div><div><dt>Reward</dt><dd>{activeJob.rewardXp || 100} XP</dd></div></dl>}
+            </article>
+          </div>
+
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Job</th><th>Agent</th><th>Customer</th><th>Price</th><th>Status</th><th>Reward</th></tr></thead>
+              <thead><tr><th>Job</th><th>Agent/payee</th><th>Client/payer</th><th>Price</th><th>Status</th><th>Reward</th></tr></thead>
               <tbody>
                 {state.jobs.length === 0 ? <tr><td colSpan={6} className="empty">No jobs yet.</td></tr> : state.jobs.map((job) => (
                   <tr key={job.id}>

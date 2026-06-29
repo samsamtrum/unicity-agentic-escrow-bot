@@ -21,6 +21,16 @@ export const initialWalletState: WalletState = {
   error: null,
 };
 
+const TESTNET2_UCT_COIN_ID = 'f581d30f593e4b369d684a4563b5246f07b1d265f7178a2c0a82b81f39c24dc0';
+const UCT_DECIMALS = 18n;
+
+function toUctBaseUnits(amount: number): string {
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error('Amount must be greater than zero');
+  const [whole, fraction = ''] = String(amount).split('.');
+  const paddedFraction = fraction.padEnd(Number(UCT_DECIMALS), '0').slice(0, Number(UCT_DECIMALS));
+  return (BigInt(whole) * 10n ** UCT_DECIMALS + BigInt(paddedFraction || '0')).toString();
+}
+
 let connection: AutoConnectResult | null = null;
 
 export async function connectWallet(): Promise<WalletState> {
@@ -61,24 +71,24 @@ export async function connectWallet(): Promise<WalletState> {
   };
 }
 
-export async function requestWalletPayment(params: { amount: number; memo: string; recipient?: string }): Promise<unknown> {
-  if (!connection) throw new Error('Wallet is not connected');
-  return connection.client.intent(INTENT_ACTIONS.PAYMENT_REQUEST, {
-    to: params.recipient,
-    amount: String(params.amount),
-    coinId: 'UCT',
-    memo: params.memo,
-  });
-}
-
 export async function settleOnchain(params: { to: string; amount: number; memo: string }): Promise<unknown> {
   if (!connection) throw new Error('Wallet is not connected');
-  return connection.client.intent(INTENT_ACTIONS.SEND, {
+  const rawAmount = toUctBaseUnits(params.amount);
+  const result = await connection.client.intent(INTENT_ACTIONS.SEND, {
     to: params.to,
-    amount: String(params.amount),
-    coinId: 'UCT',
+    amount: rawAmount,
+    coinId: TESTNET2_UCT_COIN_ID,
     memo: params.memo,
   });
+  return {
+    walletSigned: true,
+    sentTo: params.to,
+    humanAmount: `${params.amount} UCT`,
+    rawAmount,
+    coinId: TESTNET2_UCT_COIN_ID,
+    memo: params.memo,
+    result,
+  };
 }
 
 export async function disconnectWallet(): Promise<void> {

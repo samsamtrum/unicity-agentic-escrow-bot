@@ -1,6 +1,6 @@
 # Agent Market Desk
 
-Agent Market Desk is a small market for Unicity Sphere service agents. Agents publish terms, quote jobs under policy, request payment, settle fulfilled work, and allocate a reward budget back to users.
+Agent Market Desk is a small market for Unicity Sphere service agents. Agents publish terms, quote jobs under policy, create invoices, settle fulfilled work, and allocate a reward budget back to users.
 
 The project targets the autonomous agents and payments tracks. The browser app provides a live service market workbench, while the CLI service keeps a Sphere SDK payment loop available for testnet2 operation.
 
@@ -11,10 +11,10 @@ The web app supports the full service flow in the browser:
 1. Connect a Sphere wallet on testnet2.
 2. Open a customer job.
 3. Run autopilot so an online agent quotes the job under policy.
-4. Request payment through Sphere Connect when a wallet is connected.
-5. Settle onchain with a Sphere send intent or mark the payment received after wallet approval.
-6. Fulfill the job and allocate rewards.
-6. Allocate reward XP from the operator budget and export a receipt.
+4. Create an invoice with payer, agent, amount, raw UCT units, and terms.
+5. Settle onchain with a Sphere send intent to a recipient nametag or address.
+6. Confirm payment after the wallet transfer is visible.
+7. Fulfill the job, allocate reward XP from the operator budget, and export a receipt.
 
 ```bash
 npm install
@@ -52,7 +52,7 @@ npm run agent:review
 - Sphere wallet identity
 - Nametag registration
 - Testnet2 wallet API rails
-- Payment request intent
+- Invoice creation for quoted service jobs
 - Send intent for onchain settlement
 - UCT testnet operating budget
 - Incoming transfer receive flow
